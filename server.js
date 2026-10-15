@@ -1,6 +1,6 @@
 const http=require('http'),{WebSocketServer}=require('ws'),crypto=require('crypto');
 const PORT=process.env.PORT||8080,WORLD=6461,fruits=[['🍎',10],['🍊',13],['🍇',16],['🍓',19],['🍉',22],['🍒',25],['🥝',28],['🍍',31],['🍌',34],['🫐',37]],powers=['magnet','triple','speed'];
-const clients=new Map(),foods=[],bots=[];const TARGET_PLAYERS=81;const rnd=(a,b)=>a+Math.random()*(b-a),pos=()=>({x:rnd(300,WORLD-300),y:rnd(300,WORLD-300)});
+const clients=new Map(),foods=[],bots=[];const TARGET_PLAYERS=61;const rnd=(a,b)=>a+Math.random()*(b-a),pos=()=>({x:rnd(300,WORLD-300),y:rnd(300,WORLD-300)});
 function newFood(){let q=pos();if(Math.random()<.075){let kind=powers[Math.random()*powers.length|0];return{x:q.x,y:q.y,type:'power',kind,value:0}}let f=fruits[Math.random()*fruits.length|0];return{x:q.x,y:q.y,type:'fruit',icon:f[0],value:f[1]}}
 for(let i=0;i<560;i++)foods.push(newFood());
 function make(id,n,c,isBot=false){let q=pos(),a=rnd(-Math.PI,Math.PI);return{id,name:n,color:c,isBot,x:q.x,y:q.y,ang:a,target:a,turbo:false,score:0,alive:true,power:null,powerUntil:0,seg:Array.from({length:30},(_,i)=>({x:q.x-Math.cos(a)*i*7,y:q.y-Math.sin(a)*i*7}))}}
@@ -16,8 +16,26 @@ function kill(p){if(!p.alive)return;p.alive=false;let c=clients.get(p.id);if(c)s
 function update(p,dt,now){if(!p.alive)return;if(p.power&&now>=p.powerUntil){p.power=null;p.powerUntil=0}let d=Math.atan2(Math.sin(p.target-p.ang),Math.cos(p.target-p.ang));p.ang+=d*Math.min(1,7*dt);let sp=184*(p.turbo?1.72:1)*(p.power==='speed'?2.15:1);p.x+=Math.cos(p.ang)*sp*dt;p.y+=Math.sin(p.ang)*sp*dt;if(p.x<18||p.y<18||p.x>WORLD-18||p.y>WORLD-18){kill(p);return}p.seg[0]={x:p.x,y:p.y};let want=Math.min(190,30+(p.score/42|0));while(p.seg.length<want)p.seg.push({...p.seg[p.seg.length-1]});p.seg.length=want;for(let i=1;i<p.seg.length;i++){let a=p.seg[i-1],b=p.seg[i],dx=b.x-a.x,dy=b.y-a.y,z=Math.hypot(dx,dy)||1;b.x=a.x+dx/z*7;b.y=a.y+dy/z*7}
  for(let i=foods.length-1;i>=0;i--){let f=foods[i],dx=p.x-f.x,dy=p.y-f.y,dd=Math.hypot(dx,dy);if(p.power==='magnet'&&f.type!=='power'&&dd<290&&dd>1){f.x+=dx/dd*320*dt;f.y+=dy/dd*320*dt;dx=p.x-f.x;dy=p.y-f.y}if(dx*dx+dy*dy<(f.type==='power'?1225:1156)){if(f.type==='power'){p.power=f.kind;p.powerUntil=now+8000}else p.score+=f.value*(p.power==='triple'?3:1);foods.splice(i,1);foods.push(newFood())}}
 }
-function collide(ps){for(const p of ps)if(p.alive)for(const o of ps)if(o!==p&&o.alive){for(let i=5;i<o.seg.length;i+=3){let s=o.seg[i],dx=p.x-s.x,dy=p.y-s.y;if(dx*dx+dy*dy<529){kill(p);break}}if(!p.alive)break}}
+function collide(ps){
+ const CELL=96,grid=new Map();
+ for(const o of ps){if(!o.alive)continue;for(let i=5;i<o.seg.length;i+=3){const s=o.seg[i],gx=(s.x/CELL)|0,gy=(s.y/CELL)|0,k=gx+','+gy;let a=grid.get(k);if(!a)grid.set(k,a=[]);a.push([o,s])}}
+ for(const p of ps){if(!p.alive)continue;const gx=(p.x/CELL)|0,gy=(p.y/CELL)|0;outer:for(let yy=gy-1;yy<=gy+1;yy++)for(let xx=gx-1;xx<=gx+1;xx++){const a=grid.get(xx+','+yy);if(!a)continue;for(const [o,q] of a){if(o===p||!o.alive)continue;let dx=p.x-q.x,dy=p.y-q.y;if(dx*dx+dy*dy<529){kill(p);break outer}}}}
+}
+function netPlayer(p){
+ const seg=p.seg.length>70?p.seg.filter((_,i)=>i===0||i%2===0):p.seg;
+ return{id:p.id,name:p.name,color:p.color,isBot:p.isBot,x:p.x,y:p.y,ang:p.ang,score:p.score,alive:p.alive,power:p.power,seg};
+}
 const app=http.createServer((q,r)=>{r.writeHead(200,{'content-type':'text/plain'});r.end('Lombris Rush server online')}),wss=new WebSocketServer({server:app});
 wss.on('connection',ws=>{let id=crypto.randomUUID(),c={ws,p:null};clients.set(id,c);send(ws,{t:'hello',id});ws.on('message',b=>{let m;try{m=JSON.parse(b)}catch(_){return}if(m.t==='join'){c.p=make(id,String(m.name||'Jogador').slice(0,16),String(m.color||'#20d5ff'));syncBots();}if(m.t==='input'&&c.p){if(Number.isFinite(m.target))c.p.target=m.target;c.p.turbo=!!m.turbo}});ws.on('close',()=>{clients.delete(id);syncBots()})});
-let last=Date.now(),snap=0;setInterval(()=>{let now=Date.now(),dt=Math.min(.05,(now-last)/1000);last=now,humans=[...clients.values()].map(c=>c.p).filter(Boolean);syncBots();ps=[...humans,...bots];bots.forEach(b=>botBrain(b,ps,now));ps.forEach(p=>update(p,dt,now));collide(ps);if(now-snap>66){snap=now;let s=JSON.stringify({t:'state',players:ps,foods});for(const c of clients.values())if(c.ws.readyState===1)c.ws.send(s)}},33);
+let last=Date.now(),snap=0,foodSnap=0;
+setInterval(()=>{
+ let now=Date.now(),dt=Math.min(.05,(now-last)/1000);last=now;
+ let humans=[...clients.values()].map(c=>c.p).filter(Boolean);syncBots();let ps=[...humans,...bots];
+ bots.forEach(b=>botBrain(b,ps,now));ps.forEach(p=>update(p,dt,now));collide(ps);
+ if(now-snap>=100){
+   snap=now;const includeFoods=now-foodSnap>=450;if(includeFoods)foodSnap=now;
+   const packet={t:'state',players:ps.map(netPlayer)};if(includeFoods)packet.foods=foods;
+   const data=JSON.stringify(packet);for(const c of clients.values())if(c.ws.readyState===1)c.ws.send(data);
+ }
+},33);
 app.listen(PORT,()=>console.log('server',PORT));
