@@ -1,8 +1,8 @@
 const http=require('http'),{WebSocketServer}=require('ws'),crypto=require('crypto');
-const PORT=process.env.PORT||8080,WORLD=4970,fruits=[['🍎',10],['🍊',13],['🍇',16],['🍓',19],['🍉',22],['🍒',25],['🥝',28],['🍍',31],['🍌',34],['🫐',37]],powers=['magnet','triple','speed'];
-const clients=new Map(),foods=[],bots=[];const TARGET_PLAYERS=15;const rnd=(a,b)=>a+Math.random()*(b-a),pos=()=>({x:rnd(300,WORLD-300),y:rnd(300,WORLD-300)});
-function newFood(){let q=pos();if(Math.random()<.055){let kind=powers[Math.random()*powers.length|0];return{x:q.x,y:q.y,type:'power',kind,value:0}}let f=fruits[Math.random()*fruits.length|0];return{x:q.x,y:q.y,type:'fruit',icon:f[0],value:f[1]}}
-for(let i=0;i<390;i++)foods.push(newFood());
+const PORT=process.env.PORT||8080,WORLD=6461,fruits=[['🍎',10],['🍊',13],['🍇',16],['🍓',19],['🍉',22],['🍒',25],['🥝',28],['🍍',31],['🍌',34],['🫐',37]],powers=['magnet','triple','speed'];
+const clients=new Map(),foods=[],bots=[];const TARGET_PLAYERS=81;const rnd=(a,b)=>a+Math.random()*(b-a),pos=()=>({x:rnd(300,WORLD-300),y:rnd(300,WORLD-300)});
+function newFood(){let q=pos();if(Math.random()<.075){let kind=powers[Math.random()*powers.length|0];return{x:q.x,y:q.y,type:'power',kind,value:0}}let f=fruits[Math.random()*fruits.length|0];return{x:q.x,y:q.y,type:'fruit',icon:f[0],value:f[1]}}
+for(let i=0;i<560;i++)foods.push(newFood());
 function make(id,n,c,isBot=false){let q=pos(),a=rnd(-Math.PI,Math.PI);return{id,name:n,color:c,isBot,x:q.x,y:q.y,ang:a,target:a,turbo:false,score:0,alive:true,power:null,powerUntil:0,seg:Array.from({length:30},(_,i)=>({x:q.x-Math.cos(a)*i*7,y:q.y-Math.sin(a)*i*7}))}}
 function send(ws,o){if(ws.readyState===1)ws.send(JSON.stringify(o))}
 
